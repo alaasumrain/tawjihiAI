@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify, render_template_string, session
-from main import ask
+from main_cli import ask
 from supabase_client import memory
 import os
 import uuid

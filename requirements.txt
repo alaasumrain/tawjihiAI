@@ -3,5 +3,8 @@ openai
 chromadb
 python-dotenv
 PyPDF2
-flask
+fastapi
+uvicorn[standard]
+websockets
 supabase
+pydantic
