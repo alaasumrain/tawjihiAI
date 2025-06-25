@@ -1,0 +1,5 @@
+praisonaiagents
+openai
+chromadb
+python-dotenv
+PyPDF2
