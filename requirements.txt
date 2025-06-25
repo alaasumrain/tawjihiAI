@@ -4,3 +4,4 @@ chromadb
 python-dotenv
 PyPDF2
 flask
+supabase

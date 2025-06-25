@@ -1,8 +1,12 @@
-from flask import Flask, request, jsonify, render_template_string
-from main_cli import ask
+from flask import Flask, request, jsonify, render_template_string, session
+from main import ask
+from supabase_client import memory
 import os
+import uuid
+from datetime import datetime
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
 # Simple HTML template for the web interface
 HTML_TEMPLATE = """
@@ -156,7 +160,7 @@ def home():
 
 @app.route('/ask', methods=['POST'])
 def ask_tutor():
-    """API endpoint for asking questions"""
+    """API endpoint for asking questions with memory"""
     try:
         data = request.get_json()
         subject = data.get('subject')
@@ -165,10 +169,51 @@ def ask_tutor():
         if not subject or not question:
             return jsonify({'error': 'يرجى إدخال المادة والسؤال'}), 400
         
-        # Use the existing ask function from main.py
-        response = ask(subject, question)
+        # Get or create user session
+        if 'user_id' not in session:
+            session['user_id'] = str(uuid.uuid4())
         
-        return jsonify({'response': response})
+        user_id = session['user_id']
+        teacher_id = subject.lower()  # math, arabic, english
+        
+        # Get or create conversation for this user and teacher
+        conversation_id = memory.get_or_create_conversation(
+            user_id=user_id,
+            teacher_id=teacher_id,
+            title=f"Chat with {subject.title()} Teacher"
+        )
+        
+        # Save user question to memory
+        if conversation_id:
+            memory.save_message(conversation_id, question, 'user')
+        
+        # Get conversation history for context
+        history = []
+        if conversation_id:
+            history = memory.get_conversation_history(conversation_id, limit=10)
+        
+        # Build context from history
+        context = ""
+        if history:
+            context = "\n\nPrevious conversation:\n"
+            for msg in history[-5:]:  # Last 5 messages for context
+                role = "Student" if msg['role'] == 'user' else "Teacher"
+                context += f"{role}: {msg['content']}\n"
+            context += "\nCurrent question:\n"
+        
+        # Get AI response with context
+        full_question = context + question if context else question
+        response = ask(subject, full_question)
+        
+        # Save AI response to memory
+        if conversation_id:
+            memory.save_message(conversation_id, response, 'assistant')
+        
+        return jsonify({
+            'response': response,
+            'conversation_id': conversation_id,
+            'has_history': len(history) > 0
+        })
     
     except Exception as e:
         return jsonify({'error': f'حدث خطأ: {str(e)}'}), 500
