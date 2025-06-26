@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File, Form
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -6,9 +6,16 @@ from typing import Optional, List, Dict
 import json
 import uuid
 from datetime import datetime
+import logging
 
 from main_cli import ask
 from supabase_client import memory
+from services.ocr_service import ocr_service
+from services.file_handler import file_handler
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="TawjihiAI API",
@@ -39,6 +46,28 @@ class QuestionRequest(BaseModel):
 class MessageResponse(BaseModel):
     response: str
     conversation_id: Optional[str] = None
+
+class FileUploadResponse(BaseModel):
+    success: bool
+    file_id: Optional[str] = None
+    filename: Optional[str] = None
+    extracted_text: Optional[str] = None
+    confidence: Optional[float] = None
+    content_type: Optional[str] = None
+    error: Optional[str] = None
+
+class OCRRequest(BaseModel):
+    text: str
+    language: str
+    confidence: float
+    content_type: str
+
+class HomeworkSolution(BaseModel):
+    problem: str
+    solution: str
+    steps: List[str]
+    subject: str
+    difficulty: str
 
 class LoginRequest(BaseModel):
     username: str
@@ -142,6 +171,133 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, agent_id: str):
                     await manager.send_json({"type": "error", "content": str(e)}, client_id)
     except WebSocketDisconnect:
         manager.disconnect(client_id)
+
+@app.post("/api/upload/homework", response_model=FileUploadResponse)
+async def upload_homework(
+    file: UploadFile = File(...),
+    user_id: str = Form(...),
+    subject: Optional[str] = Form(None)
+):
+    """
+    Upload homework image or document for AI assistance
+    """
+    try:
+        logger.info(f"Homework upload request from user {user_id}: {file.filename}")
+        
+        # Save file
+        save_result = file_handler.save_file(file, user_id)
+        if not save_result['success']:
+            raise HTTPException(status_code=400, detail=save_result['errors'])
+        
+        # Extract text if it's an image
+        extracted_text = None
+        confidence = 0
+        
+        if file.content_type and file.content_type.startswith('image/'):
+            # Read file content for OCR
+            file_content = file.file.read()
+            file.file.seek(0)  # Reset for potential future use
+            
+            # Extract text using OCR
+            ocr_result = ocr_service.extract_homework_content(file_content)
+            extracted_text = ocr_result.get('primary', {}).get('text', '')
+            confidence = ocr_result.get('primary', {}).get('confidence', 0)
+            
+            logger.info(f"OCR extraction completed with confidence: {confidence}%")
+        
+        return FileUploadResponse(
+            success=True,
+            file_id=save_result['filename'],
+            filename=file.filename,
+            extracted_text=extracted_text,
+            confidence=confidence,
+            content_type=file.content_type
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Homework upload error: {e}")
+        return FileUploadResponse(
+            success=False,
+            error=str(e)
+        )
+
+@app.post("/api/ocr/extract")
+async def extract_text_from_image(
+    file: UploadFile = File(...),
+    language: Optional[str] = Form(None)
+):
+    """
+    Extract text from uploaded image using OCR
+    """
+    try:
+        # Validate file type
+        if not file.content_type or not file.content_type.startswith('image/'):
+            raise HTTPException(status_code=400, detail="Only image files are supported")
+        
+        # Read file content
+        file_content = await file.read()
+        
+        # Extract text using OCR
+        if language:
+            ocr_result = ocr_service.extract_text(file_content, language)
+        else:
+            ocr_result = ocr_service.extract_text_bilingual(file_content)
+            
+        return ocr_result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"OCR extraction error: {e}")
+        raise HTTPException(status_code=500, detail=f"OCR processing failed: {str(e)}")
+
+@app.post("/api/solve/step-by-step")
+async def solve_homework_step_by_step(
+    problem_text: str = Form(...),
+    subject: str = Form(...),
+    user_id: Optional[str] = Form(None)
+):
+    """
+    Get step-by-step solution for homework problem
+    """
+    try:
+        # Enhanced prompt for step-by-step solutions
+        step_by_step_prompt = f"""
+        Please solve this {subject} problem step-by-step:
+        
+        Problem: {problem_text}
+        
+        Provide:
+        1. Clear step-by-step solution
+        2. Explanation of each step
+        3. Final answer
+        4. Key concepts used
+        
+        Format your response in a clear, educational manner suitable for Tawjihi students.
+        """
+        
+        # Get AI response
+        response = ask(subject, step_by_step_prompt)
+        
+        return {
+            "problem": problem_text,
+            "solution": response,
+            "subject": subject,
+            "solved_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Step-by-step solution error: {e}")
+        raise HTTPException(status_code=500, detail=f"Solution generation failed: {str(e)}")
+
+@app.get("/api/supported-formats")
+async def get_supported_formats():
+    """
+    Get list of supported file formats for upload
+    """
+    return file_handler.get_supported_types()
 
 @app.get("/health")
 async def health_check():

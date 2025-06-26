@@ -8,3 +8,14 @@ uvicorn[standard]
 websockets
 supabase
 pydantic
+# OCR and Image Processing
+pytesseract==0.3.13
+pillow==11.2.1
+pdf2image==1.17.0
+opencv-python==4.11.0.86
+# File handling
+python-multipart==0.0.20
+# Additional AI capabilities
+sentence-transformers==2.2.2
+# PDF generation
+reportlab==4.0.4
