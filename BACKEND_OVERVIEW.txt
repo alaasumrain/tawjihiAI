@@ -1,0 +1,193 @@
+# TAWJIHIAI BACKEND SYSTEM OVERVIEW
+=====================================
+
+## WHAT IS THIS SYSTEM?
+TawjihiAI is an intelligent tutoring system for Jordanian Tawjihi students. 
+The backend provides AI-powered tutoring in Math, Arabic, and English with 
+homework assistance via OCR image processing.
+
+## CORE ARCHITECTURE
+===================
+
+### 1. MAIN APPLICATION (main.py)
+- FastAPI application serving RESTful APIs
+- WebSocket support for real-time chat
+- Global error handling with detailed logging
+- CORS configuration for frontend integration
+- Input validation using Pydantic models
+
+### 2. AI AGENT SYSTEM
+- Uses PraisonAI framework for AI agents
+- Three specialized tutors: Math, Arabic, English
+- Each agent has custom backstories and teaching styles
+- Agents are initialized in agents/ directory
+- Question routing handled by main_cli.py
+
+### 3. DATABASE INTEGRATION
+- Supabase as primary database
+- Conversation memory system
+- Message persistence across sessions
+- User session management
+- Study session tracking
+
+### 4. FILE PROCESSING SYSTEM
+- OCR service for homework image processing
+- Support for Arabic and English text extraction
+- Image preprocessing for better OCR accuracy
+- File upload handling with validation
+- Support for multiple image formats
+
+### 5. SERVICES ARCHITECTURE
+- services/ocr_service.py: Tesseract OCR integration
+- services/file_handler.py: File upload and validation
+- supabase_client.py: Database operations
+- main_cli.py: AI agent routing logic
+
+## KEY COMPONENTS
+================
+
+### FastAPI Application Structure:
+```
+main.py
+├── Global exception handlers
+├── CORS middleware
+├── Pydantic models for validation
+├── REST API endpoints
+├── WebSocket endpoints
+└── Health check endpoint
+```
+
+### AI Agent Workflow:
+```
+User Question → main_cli.ask() → Subject Router → Specific Agent → Response
+```
+
+### Database Flow:
+```
+User Request → Create/Get Conversation → Save Messages → Return Response
+```
+
+### OCR Processing Flow:
+```
+Image Upload → File Validation → OCR Processing → Text Extraction → AI Processing
+```
+
+## TECH STACK
+============
+- FastAPI: Web framework
+- PraisonAI: AI agent framework  
+- Supabase: Database and real-time features
+- Tesseract: OCR engine
+- OpenCV: Image processing
+- Pillow: Image manipulation
+- WebSockets: Real-time communication
+- Uvicorn: ASGI server
+
+## FILE STRUCTURE
+===============
+```
+backend/
+├── main.py                      # Main FastAPI application
+├── main_cli.py                 # AI agent routing logic
+├── supabase_client.py          # Database client and operations
+├── requirements.txt            # Python dependencies
+├── Procfile                   # Railway deployment config
+├── railway.json               # Railway build configuration
+├── CLAUDE.md                  # Project documentation
+├── BACKEND_OVERVIEW.txt       # System architecture guide
+├── API_ENDPOINTS.txt          # API documentation
+├── DATABASE_SCHEMA.txt        # Database schema and operations
+├── DEVELOPMENT_SETUP.txt      # Local setup instructions
+├── AI_AGENTS_GUIDE.txt        # AI system documentation
+├── OCR_SYSTEM.txt             # OCR and file handling
+├── DEPLOYMENT_GUIDE.txt       # Railway deployment guide
+├── TROUBLESHOOTING.txt        # Common issues and solutions
+├── agents/                    # AI tutor agents
+│   ├── __init__.py
+│   ├── math.py               # Mathematics tutor
+│   ├── arabic.py             # Arabic language tutor
+│   └── english.py            # English language tutor
+├── services/                 # Core services
+│   ├── ocr_service.py        # OCR and image processing
+│   └── file_handler.py       # File upload handling
+├── uploads/                  # File upload directory (auto-created)
+├── data/                     # Static data and resources
+├── test_api.py              # API testing script
+├── test_ocr.py              # OCR testing script
+└── venv/                    # Python virtual environment (created locally)
+```
+
+## ENVIRONMENT VARIABLES
+=======================
+REQUIRED:
+- OPENAI_API_KEY: OpenAI API access
+- SUPABASE_URL: Supabase project URL
+- SUPABASE_KEY: Supabase anonymous key
+
+OPTIONAL:
+- ALLOWED_ORIGINS: CORS allowed origins (comma-separated)
+- ENVIRONMENT: development/production
+- PORT: Server port (default: 8000)
+
+## CORE FEATURES
+===============
+
+### 1. AI TUTORING
+- Subject-specific AI agents with specialized knowledge
+- Bilingual support (Arabic/English)
+- Step-by-step problem solving
+- Contextual conversation memory
+
+### 2. HOMEWORK ASSISTANCE  
+- Image upload for homework problems
+- OCR text extraction (Arabic/English)
+- Automatic problem type detection
+- AI-powered solutions with explanations
+
+### 3. REAL-TIME CHAT
+- WebSocket connections for live tutoring
+- Connection management and reconnection
+- Message broadcasting and status updates
+
+### 4. DATA PERSISTENCE
+- Conversation history storage
+- User session management
+- Study progress tracking
+- Message threading and context
+
+## IMPORTANT NOTES FOR DEVELOPERS
+================================
+
+### 1. AI AGENT CONFIGURATION
+- Agents are pre-configured with specific backstories
+- Each agent specializes in Jordanian Tawjihi curriculum
+- Agent responses are in Arabic by default, English on request
+- Agents use GPT-4 model for high-quality responses
+
+### 2. DATABASE PATTERNS
+- All database operations go through supabase_client.py
+- Conversations are auto-created per user/agent pair
+- Messages are saved with role (user/assistant) and timestamps
+- Use the TawjihiMemory class for all DB operations
+
+### 3. ERROR HANDLING
+- Global exception handlers catch all errors
+- Detailed logging with request IDs for tracking
+- Validation errors return structured JSON responses
+- OCR failures gracefully degrade to manual input
+
+### 4. SECURITY CONSIDERATIONS
+- Input validation on all endpoints
+- File type and size restrictions
+- CORS properly configured for production
+- No sensitive data logged or exposed
+
+### 5. PERFORMANCE NOTES
+- OCR processing can be CPU-intensive
+- Image preprocessing improves accuracy but adds latency
+- WebSocket connections are managed per user/agent pair
+- Database queries are optimized for conversation retrieval
+
+This system is designed to be scalable, maintainable, and provide 
+high-quality educational assistance to Jordanian students preparing 
+for their Tawjihi examinations.

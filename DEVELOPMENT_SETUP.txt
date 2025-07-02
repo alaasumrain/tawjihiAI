@@ -1,0 +1,377 @@
+# TAWJIHIAI BACKEND DEVELOPMENT SETUP
+====================================
+
+## PREREQUISITES
+================
+
+### Required Software:
+1. **Python 3.8+** (Recommended: 3.11)
+   - Download from: https://python.org
+   - Verify: `python --version`
+
+2. **Git** 
+   - Download from: https://git-scm.com
+   - Verify: `git --version`
+
+3. **Tesseract OCR**
+   - macOS: `brew install tesseract tesseract-lang-ara`
+   - Ubuntu: `sudo apt-get install tesseract-ocr tesseract-ocr-ara`
+   - Windows: Download from GitHub releases
+   - Verify: `tesseract --version`
+
+4. **Code Editor** (Recommended: VS Code with Python extension)
+
+### Required Accounts:
+1. **OpenAI API Account**
+   - Sign up at: https://platform.openai.com
+   - Get API key from dashboard
+
+2. **Supabase Account** 
+   - Sign up at: https://supabase.com
+   - Create new project
+   - Get URL and anon key from settings
+
+## STEP-BY-STEP SETUP
+===================
+
+### 1. CLONE REPOSITORY
+```bash
+git clone <your-repo-url>
+cd tawjihiAI/backend
+```
+
+### 2. CREATE VIRTUAL ENVIRONMENT
+```bash
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# On macOS/Linux:
+source venv/bin/activate
+
+# On Windows:
+venv\Scripts\activate
+
+# Verify activation (should show venv in prompt)
+which python  # Should point to venv/bin/python
+```
+
+### 3. INSTALL DEPENDENCIES
+```bash
+# Upgrade pip first
+pip install --upgrade pip
+
+# Install all requirements
+pip install -r requirements.txt
+
+# Verify installation
+pip list
+```
+
+### 4. ENVIRONMENT VARIABLES
+Create `.env` file in backend directory:
+```bash
+# Copy template
+cp .env.example .env  # If template exists, or create manually
+
+# Edit .env file
+nano .env
+```
+
+**Required Environment Variables**:
+```bash
+# OpenAI Configuration
+OPENAI_API_KEY=sk-your-openai-api-key-here
+
+# Supabase Configuration  
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-supabase-anon-key
+
+# Development Configuration
+ENVIRONMENT=development
+ALLOWED_ORIGINS=http://localhost:8080,http://localhost:3000
+HOST=0.0.0.0
+PORT=8000
+```
+
+### 5. VERIFY TESSERACT INSTALLATION
+```bash
+# Test Tesseract
+tesseract --version
+
+# Test Arabic language support
+tesseract --list-langs | grep ara
+
+# If Arabic not found, install:
+# macOS: brew install tesseract-lang-ara
+# Ubuntu: sudo apt-get install tesseract-ocr-ara
+```
+
+### 6. TEST DATABASE CONNECTION
+```bash
+# Quick test script
+python -c "
+from supabase_client import memory
+print('Database connection successful!')
+print(f'Client initialized: {memory.client}')
+"
+```
+
+### 7. START DEVELOPMENT SERVER
+```bash
+# Start FastAPI server
+python main.py
+
+# Alternative with uvicorn directly
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+# Server should start on: http://localhost:8000
+```
+
+### 8. VERIFY SETUP
+Open browser and test these URLs:
+- http://localhost:8000 (Home page)
+- http://localhost:8000/health (Health check)
+- http://localhost:8000/docs (API documentation)
+- http://localhost:8000/api/agents (Available tutors)
+
+## DEVELOPMENT WORKFLOW
+======================
+
+### Daily Development Process:
+```bash
+# 1. Activate virtual environment
+source venv/bin/activate
+
+# 2. Pull latest changes
+git pull origin main
+
+# 3. Install any new dependencies
+pip install -r requirements.txt
+
+# 4. Start development server
+python main.py
+
+# 5. Make changes and test
+
+# 6. Run any tests
+python -m pytest  # If tests exist
+
+# 7. Commit changes
+git add .
+git commit -m "Description of changes"
+git push origin feature-branch
+```
+
+### Hot Reload Development:
+```bash
+# Use uvicorn with reload for automatic restart on file changes
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+## PROJECT STRUCTURE UNDERSTANDING
+==================================
+
+```
+backend/
+├── main.py                 # 🔥 Main FastAPI application - START HERE
+├── main_cli.py            # AI agent routing logic
+├── supabase_client.py     # Database operations
+├── requirements.txt       # Python dependencies
+├── .env                   # Environment variables (create this)
+├── agents/               # AI tutor implementations
+│   ├── math.py          # Mathematics tutor
+│   ├── arabic.py        # Arabic language tutor
+│   └── english.py       # English language tutor
+├── services/            # Core services
+│   ├── ocr_service.py   # Image text extraction
+│   └── file_handler.py  # File upload handling
+├── uploads/            # Uploaded files (auto-created)
+├── data/              # Static resources
+└── venv/             # Virtual environment (created by you)
+```
+
+## TESTING YOUR SETUP
+====================
+
+### 1. API Testing with curl:
+```bash
+# Test health endpoint
+curl http://localhost:8000/health
+
+# Test agents endpoint  
+curl http://localhost:8000/api/agents
+
+# Test AI question
+curl -X POST http://localhost:8000/api/ask \
+  -H "Content-Type: application/json" \
+  -d '{"subject":"math","question":"What is 2+2?"}'
+```
+
+### 2. WebSocket Testing:
+```javascript
+// Open browser console on any page
+const ws = new WebSocket('ws://localhost:8000/ws/test123/math');
+ws.onopen = () => console.log('Connected!');
+ws.onmessage = (e) => console.log('Received:', JSON.parse(e.data));
+ws.send(JSON.stringify({type: 'question', subject: 'math', question: 'Hello'}));
+```
+
+### 3. File Upload Testing:
+```bash
+# Create test image
+echo "Test content" > test.txt
+
+# Test OCR endpoint (requires actual image)
+curl -X POST http://localhost:8000/api/upload/homework \
+  -F "file=@test.jpg" \
+  -F "user_id=test123"
+```
+
+## COMMON DEVELOPMENT ISSUES
+===========================
+
+### Issue 1: Import Errors
+```bash
+# Problem: ModuleNotFoundError
+# Solution: Ensure virtual environment is activated
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### Issue 2: Tesseract Not Found
+```bash
+# Problem: TesseractNotFoundError
+# Solution: Install Tesseract and verify PATH
+which tesseract
+# If not found, install according to your OS
+```
+
+### Issue 3: Database Connection Fails
+```bash
+# Problem: Supabase connection error
+# Solution: Check environment variables
+python -c "import os; print(os.getenv('SUPABASE_URL'))"
+# Should print your Supabase URL
+```
+
+### Issue 4: Port Already in Use
+```bash
+# Problem: Port 8000 already in use
+# Solution: Kill process or use different port
+lsof -ti:8000 | xargs kill -9
+# Or start on different port:
+uvicorn main:app --port 8001
+```
+
+### Issue 5: OpenAI API Errors
+```bash
+# Problem: OpenAI API key invalid
+# Solution: Verify API key and billing
+python -c "
+import openai
+import os
+openai.api_key = os.getenv('OPENAI_API_KEY')
+print('API Key valid!' if openai.api_key else 'API Key missing!')
+"
+```
+
+## DEBUGGING SETUP
+=================
+
+### Enable Debug Logging:
+```python
+# Add to main.py temporarily
+import logging
+logging.getLogger().setLevel(logging.DEBUG)
+```
+
+### Check Dependencies:
+```bash
+# List installed packages
+pip list
+
+# Check for conflicts
+pip check
+
+# Generate new requirements
+pip freeze > requirements_new.txt
+```
+
+### Environment Debugging:
+```python
+# Debug script to check all env vars
+python -c "
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+required_vars = ['OPENAI_API_KEY', 'SUPABASE_URL', 'SUPABASE_KEY']
+for var in required_vars:
+    value = os.getenv(var)
+    status = '✓' if value else '✗'
+    print(f'{status} {var}: {value[:10]}...' if value else f'{status} {var}: NOT SET')
+"
+```
+
+## IDE SETUP (VS Code)
+=====================
+
+### Recommended Extensions:
+1. Python (Microsoft)
+2. Pylance (Microsoft)  
+3. Python Docstring Generator
+4. FastAPI (optional)
+5. REST Client (for API testing)
+
+### VS Code Settings (.vscode/settings.json):
+```json
+{
+    "python.defaultInterpreterPath": "./venv/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": true,
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/venv": true
+    }
+}
+```
+
+### Launch Configuration (.vscode/launch.json):
+```json
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "FastAPI",
+            "type": "python",
+            "request": "launch",
+            "program": "main.py",
+            "console": "integratedTerminal",
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
+}
+```
+
+## NEXT STEPS
+============
+
+1. **Read Documentation**: Go through all .txt files in this directory
+2. **Test All Endpoints**: Use the API documentation to test each endpoint
+3. **Understand AI Agents**: Review the agents/ directory
+4. **Database Familiarization**: Test database operations
+5. **Frontend Integration**: Understand how frontend connects to backend
+
+## GETTING HELP
+==============
+
+1. **Check Documentation**: Read all .txt files in backend directory
+2. **API Documentation**: Visit http://localhost:8000/docs when server is running
+3. **Log Files**: Check tawjihiai.log for error details
+4. **Database Issues**: Use Supabase dashboard for direct database access
+5. **AI Agent Issues**: Check OpenAI API dashboard for usage and errors
+
+Remember: This is an educational AI tutoring system for Jordanian Tawjihi students. 
+The system handles Arabic text, bilingual conversations, and homework image processing.

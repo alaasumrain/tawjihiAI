@@ -1,0 +1,636 @@
+# TAWJIHIAI TROUBLESHOOTING GUIDE
+=================================
+
+## OVERVIEW
+==========
+This guide covers common issues, error messages, debugging techniques, 
+and solutions for the TawjihiAI backend system. Organized by component 
+and severity for quick problem resolution.
+
+## QUICK DIAGNOSIS CHECKLIST
+============================
+When encountering issues, check these first:
+
+### 🔥 CRITICAL CHECKS:
+1. **Server Running**: Is `python main.py` working locally?
+2. **Environment Variables**: Are OPENAI_API_KEY, SUPABASE_URL, SUPABASE_KEY set?
+3. **Dependencies**: Is `pip install -r requirements.txt` successful?
+4. **Tesseract**: Is `tesseract --version` working?
+5. **Database**: Can you connect to Supabase?
+
+### ⚡ QUICK TESTS:
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# Test AI agent
+curl -X POST http://localhost:8000/api/ask \
+  -H "Content-Type: application/json" \
+  -d '{"subject":"math","question":"test"}'
+
+# Test database
+python -c "from supabase_client import memory; print('DB OK')"
+```
+
+## APPLICATION STARTUP ISSUES
+=============================
+
+### Issue 1: "ModuleNotFoundError"
+```
+ModuleNotFoundError: No module named 'fastapi'
+```
+
+**Cause**: Virtual environment not activated or dependencies not installed
+
+**Solutions**:
+```bash
+# Activate virtual environment
+source venv/bin/activate  # macOS/Linux
+venv\Scripts\activate     # Windows
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Verify installation
+pip list | grep fastapi
+```
+
+### Issue 2: "TesseractNotFoundError"
+```
+TesseractNotFoundError: tesseract is not installed or it's not in your PATH
+```
+
+**Cause**: Tesseract OCR not installed or not in system PATH
+
+**Solutions**:
+```bash
+# macOS
+brew install tesseract tesseract-lang-ara
+
+# Ubuntu/Debian
+sudo apt-get install tesseract-ocr tesseract-ocr-ara
+
+# Windows
+# Download installer from GitHub releases
+
+# Verify installation
+tesseract --version
+tesseract --list-langs | grep ara
+```
+
+### Issue 3: "ValueError: SUPABASE_URL and SUPABASE_KEY must be set"
+```
+ValueError: SUPABASE_URL and SUPABASE_KEY must be set in environment variables
+```
+
+**Cause**: Database environment variables missing
+
+**Solutions**:
+```bash
+# Check current environment variables
+echo $SUPABASE_URL
+echo $SUPABASE_KEY
+
+# Set environment variables (temporary)
+export SUPABASE_URL="https://your-project.supabase.co"
+export SUPABASE_KEY="your-supabase-anon-key"
+
+# Or add to .env file
+echo "SUPABASE_URL=https://your-project.supabase.co" >> .env
+echo "SUPABASE_KEY=your-supabase-anon-key" >> .env
+```
+
+### Issue 4: "Port 8000 already in use"
+```
+OSError: [Errno 48] Address already in use
+```
+
+**Cause**: Another process using port 8000
+
+**Solutions**:
+```bash
+# Find process using port 8000
+lsof -ti:8000
+
+# Kill process using port
+lsof -ti:8000 | xargs kill -9
+
+# Or use different port
+uvicorn main:app --port 8001
+```
+
+## API ENDPOINT ISSUES
+=====================
+
+### Issue 5: "422 Validation Error"
+```json
+{
+  "error": "Validation Error",
+  "detail": "Invalid request data",
+  "errors": [
+    {
+      "loc": ["body", "subject"],
+      "msg": "field required",
+      "type": "value_error.missing"
+    }
+  ]
+}
+```
+
+**Cause**: Request body missing required fields or invalid format
+
+**Solutions**:
+```bash
+# Correct request format
+curl -X POST http://localhost:8000/api/ask \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subject": "math",
+    "question": "What is 2+2?",
+    "user_id": "test123"
+  }'
+
+# Check field requirements:
+# subject: 1-100 characters, required
+# question: 1-5000 characters, required  
+# user_id: max 100 characters, optional
+```
+
+### Issue 6: "CORS policy error"
+```
+Access to fetch at 'http://localhost:8000/api/ask' from origin 'http://localhost:3000' 
+has been blocked by CORS policy
+```
+
+**Cause**: Frontend origin not allowed in CORS configuration
+
+**Solutions**:
+```bash
+# Add frontend origin to ALLOWED_ORIGINS
+export ALLOWED_ORIGINS="http://localhost:3000,http://localhost:8080"
+
+# Or update .env file
+echo "ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8080" >> .env
+
+# Restart server after changing CORS settings
+```
+
+### Issue 7: "Internal Server Error (500)"
+```json
+{
+  "error": "Internal Server Error",
+  "detail": "An unexpected error occurred",
+  "request_id": "uuid-for-tracking"
+}
+```
+
+**Cause**: Unhandled exception in application code
+
+**Solutions**:
+```bash
+# Check application logs
+tail -f tawjihiai.log
+
+# Enable debug logging
+export LOG_LEVEL=DEBUG
+python main.py
+
+# Check specific component logs
+python -c "
+import logging
+logging.basicConfig(level=logging.DEBUG)
+from agents.math import math_tutor
+print(math_tutor.start('test'))
+"
+```
+
+## AI AGENT ISSUES
+=================
+
+### Issue 8: "OpenAI API Error - Invalid API Key"
+```
+openai.error.AuthenticationError: Invalid API key provided
+```
+
+**Cause**: Missing or incorrect OpenAI API key
+
+**Solutions**:
+```bash
+# Check API key format (should start with sk-)
+echo $OPENAI_API_KEY
+
+# Test API key
+python -c "
+import openai
+import os
+openai.api_key = os.getenv('OPENAI_API_KEY')
+try:
+    openai.Model.list()
+    print('API key valid')
+except:
+    print('API key invalid')
+"
+
+# Get new API key from https://platform.openai.com/api-keys
+```
+
+### Issue 9: "OpenAI API Error - Rate Limit Exceeded"
+```
+openai.error.RateLimitError: Rate limit reached
+```
+
+**Cause**: Too many requests to OpenAI API
+
+**Solutions**:
+```bash
+# Check OpenAI usage dashboard
+# Implement request queuing or rate limiting
+# Upgrade OpenAI plan if needed
+
+# Temporary solution: Add delays between requests
+import time
+time.sleep(1)  # Wait 1 second between requests
+```
+
+### Issue 10: "Agent returns empty response"
+```
+Agent response: ""
+API returns: "عذراً، لم أتمكن من الإجابة على سؤالك"
+```
+
+**Cause**: Agent initialization failure or OpenAI API issue
+
+**Solutions**:
+```python
+# Test agent directly
+from agents.math import math_tutor
+print(f"Agent name: {math_tutor.name}")
+print(f"Agent role: {math_tutor.role}")
+
+# Test with simple question
+response = math_tutor.start("Hello")
+print(f"Response: {response}")
+
+# Check agent configuration
+print(f"LLM model: {math_tutor.llm}")
+```
+
+## DATABASE ISSUES
+=================
+
+### Issue 11: "Supabase Connection Error"
+```
+httpx.ConnectError: [Errno 61] Connection refused
+```
+
+**Cause**: Network connectivity or incorrect Supabase configuration
+
+**Solutions**:
+```bash
+# Test internet connectivity
+ping supabase.com
+
+# Verify Supabase URL format
+echo $SUPABASE_URL
+# Should be: https://your-project.supabase.co
+
+# Test manual connection
+python -c "
+from supabase import create_client
+import os
+client = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_KEY'))
+print(client.table('conversations').select('count').execute())
+"
+```
+
+### Issue 12: "Table doesn't exist"
+```
+{"code":"42P01","details":null,"hint":null,"message":"relation \"conversations\" does not exist"}
+```
+
+**Cause**: Database tables not created or wrong database
+
+**Solutions**:
+```bash
+# Check Supabase dashboard for tables:
+# - conversations
+# - messages  
+# - study_sessions
+
+# Run migrations if available
+cd frontend/supabase
+supabase db push
+
+# Manually create tables using SQL in Supabase dashboard
+```
+
+### Issue 13: "Permission denied for table"
+```
+{"code":"42501","details":null,"hint":null,"message":"permission denied for table conversations"}
+```
+
+**Cause**: Row Level Security (RLS) enabled without proper policies
+
+**Solutions**:
+```sql
+-- Disable RLS temporarily for testing
+ALTER TABLE conversations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE messages DISABLE ROW LEVEL SECURITY;
+
+-- Or create appropriate policies
+CREATE POLICY "Allow all operations" ON conversations FOR ALL USING (true);
+```
+
+## OCR SYSTEM ISSUES
+===================
+
+### Issue 14: "OCR extraction returns empty text"
+```json
+{
+  "success": true,
+  "extracted_text": "",
+  "confidence": 0
+}
+```
+
+**Cause**: Poor image quality or unsupported content
+
+**Solutions**:
+```python
+# Test with clear, high-contrast image
+# Check supported formats: JPEG, PNG, GIF, BMP, WebP
+# Verify image contains readable text
+# Test language detection:
+
+from services.ocr_service import ocr_service
+result = ocr_service.extract_text_bilingual(image_bytes)
+print(f"Primary: {result['primary']}")
+print(f"Secondary: {result['secondary']}")
+```
+
+### Issue 15: "File upload size limit exceeded"
+```json
+{
+  "success": false,
+  "error": "File size exceeds 10MB limit"
+}
+```
+
+**Cause**: Uploaded file too large
+
+**Solutions**:
+```bash
+# Check file size
+ls -lh homework.jpg
+
+# Compress image before upload
+# Convert to JPEG format for smaller size
+# Resize image if resolution too high
+
+# Test file upload
+curl -X POST http://localhost:8000/api/upload/homework \
+  -F "file=@small_image.jpg" \
+  -F "user_id=test123"
+```
+
+### Issue 16: "OCR processing timeout"
+```
+TimeoutError: OCR processing took too long
+```
+
+**Cause**: Large image or complex content
+
+**Solutions**:
+```python
+# Optimize image before OCR
+from PIL import Image
+image = Image.open("large_image.jpg")
+# Resize if too large
+if image.width > 2000:
+    image = image.resize((2000, int(2000 * image.height / image.width)))
+
+# Use faster OCR settings
+config = '--oem 3 --psm 8'  # Single word mode
+```
+
+## WEBSOCKET ISSUES
+==================
+
+### Issue 17: "WebSocket connection failed"
+```
+WebSocket connection to 'ws://localhost:8000/ws/user123/math' failed
+```
+
+**Cause**: Server not running, incorrect URL, or CORS issues
+
+**Solutions**:
+```javascript
+// Test WebSocket connection
+const ws = new WebSocket('ws://localhost:8000/ws/test123/math');
+ws.onopen = () => console.log('Connected!');
+ws.onerror = (error) => console.log('Error:', error);
+ws.onclose = (event) => console.log('Closed:', event.code, event.reason);
+
+// Check server logs for WebSocket errors
+// Verify user_id and agent_id format
+// Test different agents: math, arabic, english
+```
+
+### Issue 18: "WebSocket disconnects frequently"
+```
+WebSocket closed with code 1006 (abnormal closure)
+```
+
+**Cause**: Network instability or server issues
+
+**Solutions**:
+```javascript
+// Implement reconnection logic
+function connectWebSocket() {
+    const ws = new WebSocket('ws://localhost:8000/ws/user123/math');
+    
+    ws.onclose = () => {
+        console.log('Reconnecting...');
+        setTimeout(connectWebSocket, 1000);
+    };
+}
+
+// Check server stability
+# Monitor server logs for crashes
+# Check resource usage (CPU, memory)
+```
+
+## DEPLOYMENT ISSUES
+===================
+
+### Issue 19: "Railway build failed"
+```
+Error: Failed to install requirements
+```
+
+**Cause**: Dependency conflicts or missing system packages
+
+**Solutions**:
+```bash
+# Test requirements locally
+pip install -r requirements.txt
+
+# Check for dependency conflicts
+pip check
+
+# Update requirements.txt
+pip freeze > requirements.txt
+
+# Check Railway build logs for specific errors
+```
+
+### Issue 20: "Environment variables not found in production"
+```
+ValueError: OPENAI_API_KEY not found
+```
+
+**Cause**: Environment variables not set in Railway dashboard
+
+**Solutions**:
+1. Go to Railway dashboard
+2. Select project → Variables tab
+3. Add all required environment variables:
+   - OPENAI_API_KEY
+   - SUPABASE_URL
+   - SUPABASE_KEY
+   - ALLOWED_ORIGINS
+4. Redeploy service
+
+### Issue 21: "Production health check failing"
+```
+Health check failed: /health endpoint not responding
+```
+
+**Cause**: Application not starting or binding to wrong port
+
+**Solutions**:
+```python
+# Ensure using Railway's PORT variable
+import os
+port = int(os.getenv("PORT", 8000))
+uvicorn.run(app, host="0.0.0.0", port=port)
+
+# Check Procfile
+cat Procfile
+# Should be: web: uvicorn main:app --host 0.0.0.0 --port $PORT
+
+# Test health endpoint
+curl https://your-app.railway.app/health
+```
+
+## PERFORMANCE ISSUES
+====================
+
+### Issue 22: "Slow API responses"
+```
+Response time > 30 seconds
+```
+
+**Cause**: OCR processing, AI agent delays, or database queries
+
+**Solutions**:
+```python
+# Add timing logs
+import time
+start_time = time.time()
+# ... processing code ...
+print(f"Processing took {time.time() - start_time:.2f} seconds")
+
+# Optimize image processing
+# Use faster OCR settings for simple text
+# Cache frequent AI responses
+# Optimize database queries
+```
+
+### Issue 23: "High memory usage"
+```
+Memory usage > 4GB
+```
+
+**Cause**: Large image processing or memory leaks
+
+**Solutions**:
+```python
+# Monitor memory usage
+import psutil
+print(f"Memory usage: {psutil.virtual_memory().percent}%")
+
+# Optimize image handling
+# Clear variables after use
+# Use image streaming for large files
+# Implement garbage collection
+```
+
+## DEBUGGING TECHNIQUES
+======================
+
+### Enable Debug Logging:
+```python
+# Add to main.py temporarily
+import logging
+logging.getLogger().setLevel(logging.DEBUG)
+
+# For specific components
+logging.getLogger('supabase').setLevel(logging.DEBUG)
+logging.getLogger('openai').setLevel(logging.DEBUG)
+```
+
+### Test Individual Components:
+```bash
+# Test database connection
+python -c "from supabase_client import memory; print(memory.client)"
+
+# Test AI agents
+python -c "from agents.math import math_tutor; print(math_tutor.start('test'))"
+
+# Test OCR service
+python -c "from services.ocr_service import ocr_service; print('OCR OK')"
+
+# Test file handler
+python -c "from services.file_handler import file_handler; print('Files OK')"
+```
+
+### Monitor System Resources:
+```bash
+# CPU and memory usage
+top
+htop
+
+# Disk usage
+df -h
+
+# Network connectivity
+ping google.com
+ping supabase.com
+```
+
+## EMERGENCY PROCEDURES
+======================
+
+### System Down - Quick Recovery:
+1. **Check health endpoint**: `curl https://your-app.railway.app/health`
+2. **Restart Railway service**: Dashboard → Deploy → Restart
+3. **Check environment variables**: Verify all required vars set
+4. **Monitor logs**: Railway dashboard → Logs tab
+5. **Test core functionality**: API endpoints, database, AI agents
+
+### Data Recovery:
+1. **Database**: Supabase handles backups automatically
+2. **Code**: Deploy from Git repository
+3. **Configuration**: Reset environment variables
+4. **User Data**: Check Supabase dashboard for data integrity
+
+### Communication:
+1. **Update status page** (if available)
+2. **Notify users** of known issues
+3. **Escalate to team** if critical system failure
+4. **Document incident** for post-mortem
+
+Remember: Most issues can be resolved by checking environment variables, 
+restarting services, and verifying external dependencies (OpenAI API, 
+Supabase, Tesseract). Always check logs first for specific error messages.

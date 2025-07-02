@@ -1,0 +1,379 @@
+# TAWJIHIAI AI AGENTS SYSTEM GUIDE
+=================================
+
+## OVERVIEW
+==========
+TawjihiAI uses the PraisonAI framework to create specialized AI tutoring agents. 
+Each agent is designed specifically for Jordanian Tawjihi curriculum subjects 
+with culturally appropriate teaching styles and bilingual capabilities.
+
+## AI FRAMEWORK
+==============
+**Framework**: PraisonAI (built on top of OpenAI GPT models)
+**Model**: GPT-4 (configurable via llm parameter)
+**Language Support**: Arabic and English (bilingual responses)
+
+## AGENT ARCHITECTURE
+====================
+
+### Agent Components:
+1. **Name**: Agent identifier and display name
+2. **Role**: Professional role and teaching specialty  
+3. **Goal**: Primary objective and purpose
+4. **Backstory**: Detailed personality and teaching approach
+5. **LLM**: Language model configuration
+6. **Settings**: Additional configuration options
+
+### Agent Initialization Pattern:
+```python
+from praisonaiagents import Agent
+
+agent = Agent(
+    name="SubjectTutor",
+    role="Subject Teacher & Homework Helper", 
+    goal="Teaching objective",
+    backstory="Detailed teaching persona",
+    llm="gpt-4o",
+    verbose=True,
+    markdown=True
+)
+```
+
+## AVAILABLE AGENTS
+==================
+
+### 1. MATHEMATICS TUTOR (agents/math.py)
+**Agent Name**: MathTutor
+**Role**: Tawjihi Math Teacher & Homework Helper
+**Specialties**:
+- Algebra and Analysis (الجبر والتحليل)
+- Geometry and Trigonometry (الهندسة والمثلثات)
+- Calculus (التفاضل والتكامل)
+- Statistics and Probability (الإحصاء والاحتمالات)
+- Applied Mathematics (الرياضيات التطبيقية)
+
+**Teaching Approach**:
+- Step-by-step problem solving
+- LaTeX mathematical notation
+- Real-life application examples
+- Common mistake identification
+- Tawjihi exam preparation tips
+
+**Persona**: Professor Ahmad (الأستاذ أحمد)
+- 15 years teaching experience
+- Specialized in Jordanian curriculum
+- Patient and encouraging teaching style
+- Bilingual Arabic/English explanations
+
+**Usage**:
+```python
+from agents.math import math_tutor
+response = math_tutor.start("Solve x² + 5x + 6 = 0")
+```
+
+### 2. ARABIC LANGUAGE TUTOR (agents/arabic.py)
+**Agent Name**: ArabicTutor  
+**Role**: Arabic Language Teacher & Literature Guide
+**Specialties**:
+- Arabic Grammar (النحو والصرف)
+- Literature Analysis (الأدب والنقد)
+- Poetry and Rhetoric (الشعر والبلاغة)
+- Writing Skills (مهارات الكتابة)
+- Reading Comprehension (الفهم والاستيعاب)
+
+**Teaching Approach**:
+- Classical Arabic focus
+- Literary text analysis
+- Grammar rule explanation
+- Writing technique guidance
+- Cultural context integration
+
+**Persona**: Traditional Arabic language educator
+- Deep knowledge of classical texts
+- Focus on Tawjihi Arabic curriculum
+- Emphasis on proper Arabic usage
+- Cultural and historical context
+
+### 3. ENGLISH LANGUAGE TUTOR (agents/english.py)
+**Agent Name**: EnglishTutor
+**Role**: English Language Teacher & Communication Guide  
+**Specialties**:
+- English Grammar and Syntax
+- Reading Comprehension
+- Writing Skills (Essays, Creative Writing)
+- Vocabulary Building
+- Literature Analysis
+
+**Teaching Approach**:
+- Communicative language teaching
+- Practical usage examples
+- Step-by-step writing guidance
+- Interactive learning methods
+- Test preparation strategies
+
+**Persona**: Modern English language educator
+- Focus on communication skills
+- Tawjihi English exam preparation
+- Bridge between Arabic and English
+- Contemporary teaching methods
+
+## AGENT ROUTING SYSTEM
+======================
+
+### Question Routing (main_cli.py):
+```python
+def ask(subject, question):
+    """Route questions to appropriate agent"""
+    if subject.lower() == "math":
+        return math_tutor.start(question)
+    elif subject.lower() == "arabic":  
+        return arabic_tutor.start(question)
+    elif subject.lower() == "english":
+        return english_tutor.start(question)
+    else:
+        return "عذراً، الموضوع غير مدعوم"
+```
+
+### Supported Subjects:
+- "math" → Math Tutor
+- "arabic" → Arabic Tutor  
+- "english" → English Tutor
+
+### Error Handling:
+- Invalid subjects return Arabic error message
+- Empty responses trigger fallback message
+- Agent failures logged for debugging
+
+## AGENT CUSTOMIZATION
+=====================
+
+### Modifying Agent Behavior:
+1. **Edit Backstory**: Change teaching style and approach
+2. **Adjust Goal**: Modify learning objectives  
+3. **Update Role**: Change professional identity
+4. **Configure LLM**: Switch between GPT models
+
+### Example Customization:
+```python
+# Enhanced math tutor with calculus focus
+math_tutor_advanced = Agent(
+    name="AdvancedMathTutor",
+    role="Advanced Mathematics & Calculus Specialist",
+    goal="Help students master advanced mathematical concepts for university preparation",
+    backstory="""You are Dr. Sarah, a mathematics professor specializing in calculus 
+    and advanced mathematical concepts. You focus on preparing students for 
+    university-level mathematics while maintaining connection to Tawjihi curriculum.""",
+    llm="gpt-4o",
+    verbose=True,
+    markdown=True
+)
+```
+
+### Configuration Options:
+- **verbose**: Enable detailed logging
+- **markdown**: Format responses with markdown
+- **llm**: Choose language model (gpt-4o, gpt-3.5-turbo, etc.)
+- **temperature**: Control response creativity (0.0-1.0)
+- **max_tokens**: Limit response length
+
+## PROMPT ENGINEERING
+====================
+
+### Effective Prompts for Agents:
+
+#### Mathematics:
+```python
+# Good prompts:
+"Solve this quadratic equation step by step: x² + 5x + 6 = 0"
+"Explain the concept of derivatives in simple terms"
+"Help me understand trigonometric identities"
+
+# Avoid:
+"Math help"  # Too vague
+"What is math?"  # Too broad
+```
+
+#### Arabic:
+```python
+# Good prompts:
+"Analyze this poetry verse: [Arabic text]"
+"Explain the difference between فعل and اسم"
+"Help me write an essay about الصداقة"
+
+# Avoid:
+"Arabic help"  # Too vague
+"Teach me Arabic"  # Too broad
+```
+
+#### English:
+```python
+# Good prompts:
+"Help me write a persuasive essay about technology"
+"Explain the difference between past simple and present perfect"
+"Analyze this poem: [English text]"
+
+# Avoid:
+"English help"  # Too vague  
+"Grammar"  # Too general
+```
+
+## CONVERSATION MEMORY
+=====================
+
+### Memory Integration:
+- Agents don't maintain memory between calls
+- Conversation memory handled by Supabase (supabase_client.py)
+- Context provided through conversation history
+- Messages saved with user/assistant roles
+
+### Memory Workflow:
+```python
+# 1. Get or create conversation
+conversation_id = memory.get_or_create_conversation(user_id, subject)
+
+# 2. Save user question
+memory.save_message(conversation_id, question, 'user')
+
+# 3. Get AI response
+response = ask(subject, question)
+
+# 4. Save AI response  
+memory.save_message(conversation_id, response, 'assistant')
+```
+
+### Context Management:
+- Recent conversation history can be retrieved
+- Agents receive current question only (stateless)
+- Context injection possible for continuity
+- Long conversations may need summarization
+
+## PERFORMANCE OPTIMIZATION
+==========================
+
+### Response Time Factors:
+1. **Model Selection**: GPT-4 vs GPT-3.5 trade-off (quality vs speed)
+2. **Prompt Length**: Longer backstories = slower responses
+3. **Network Latency**: OpenAI API response time
+4. **Concurrent Requests**: Multiple users may impact performance
+
+### Optimization Strategies:
+```python
+# Faster responses with GPT-3.5
+quick_tutor = Agent(
+    name="QuickMathTutor",
+    role="Math Helper",
+    goal="Quick math assistance", 
+    backstory="Brief backstory for faster processing",
+    llm="gpt-3.5-turbo",  # Faster model
+    verbose=False,  # Less logging
+    markdown=False  # Simpler formatting
+)
+
+# Streaming responses (if supported)
+# Implement chunked responses for long answers
+```
+
+### Monitoring Performance:
+- Log response times in main.py
+- Monitor OpenAI API usage and costs
+- Track agent success/failure rates
+- Monitor user satisfaction metrics
+
+## ERROR HANDLING
+================
+
+### Common Agent Errors:
+1. **API Key Issues**: Invalid or missing OpenAI key
+2. **Rate Limiting**: Too many requests to OpenAI
+3. **Model Unavailable**: Temporary OpenAI service issues
+4. **Timeout Errors**: Long-running responses
+5. **Content Policy**: Responses blocked by OpenAI filters
+
+### Error Handling Pattern:
+```python
+def robust_ask(subject, question):
+    try:
+        response = ask(subject, question)
+        return response if response else "عذراً، لم أتمكن من الإجابة"
+    except Exception as e:
+        logger.error(f"Agent error: {e}")
+        return "عذراً، حدث خطأ تقني. يرجى المحاولة مرة أخرى"
+```
+
+### Fallback Strategies:
+- Default to simple responses when agents fail
+- Provide apologetic messages in Arabic
+- Log all errors for debugging
+- Graceful degradation for service interruptions
+
+## TESTING AGENTS
+================
+
+### Unit Testing:
+```python
+# Test agent initialization
+def test_math_agent():
+    assert math_tutor.name == "MathTutor"
+    assert "math" in math_tutor.role.lower()
+
+# Test agent responses
+def test_math_response():
+    response = math_tutor.start("What is 2+2?")
+    assert response is not None
+    assert len(response) > 0
+```
+
+### Integration Testing:
+```python
+# Test routing system
+def test_routing():
+    response = ask("math", "What is algebra?")
+    assert "algebra" in response.lower() or "جبر" in response
+
+# Test conversation flow
+def test_conversation():
+    conv_id = memory.get_or_create_conversation("test", "math")
+    memory.save_message(conv_id, "Hello", "user")
+    response = ask("math", "Hello")
+    memory.save_message(conv_id, response, "assistant")
+    assert conv_id is not None
+```
+
+### Manual Testing:
+```bash
+# Direct agent testing
+python -c "
+from agents.math import math_tutor
+print(math_tutor.start('What is calculus?'))
+"
+
+# Full system testing
+curl -X POST http://localhost:8000/api/ask \
+  -H 'Content-Type: application/json' \
+  -d '{"subject":"math","question":"Explain derivatives"}'
+```
+
+## DEPLOYMENT CONSIDERATIONS
+===========================
+
+### Environment Requirements:
+- OpenAI API key with sufficient credits
+- Stable internet connection for API calls
+- Adequate server resources for concurrent requests
+- Error monitoring and alerting system
+
+### Production Optimizations:
+- Implement response caching for common questions
+- Add rate limiting per user
+- Monitor API usage and costs
+- Implement circuit breaker for API failures
+- Add response time monitoring
+
+### Scaling Considerations:
+- Agent responses are stateless (easily scalable)
+- Database bottleneck may occur with many concurrent users
+- OpenAI API rate limits may require queuing
+- Consider implementing agent response caching
+
+This AI agent system provides specialized, culturally appropriate tutoring 
+for Jordanian Tawjihi students with robust error handling and scalability considerations.

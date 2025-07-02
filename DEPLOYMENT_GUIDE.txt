@@ -1,0 +1,467 @@
+# TAWJIHIAI RAILWAY DEPLOYMENT GUIDE
+===================================
+
+## OVERVIEW
+==========
+TawjihiAI backend is deployed on Railway.app, a modern deployment platform 
+that automatically builds and deploys from Git repositories. This guide 
+covers deployment configuration, environment setup, and troubleshooting.
+
+## RAILWAY PLATFORM
+==================
+- **Platform**: Railway.app
+- **Build System**: Nixpacks (automatic detection)
+- **Runtime**: Python 3.11+ with FastAPI
+- **Database**: External Supabase (not Railway PostgreSQL)
+- **Domain**: tawjihiai-production.up.railway.app
+
+## DEPLOYMENT CONFIGURATION
+===========================
+
+### 1. PROCFILE (Process Definition)
+**File**: `Procfile`
+```
+web: uvicorn main:app --host 0.0.0.0 --port $PORT
+```
+
+**Explanation**:
+- **web**: Railway web service type
+- **uvicorn**: ASGI server for FastAPI
+- **main:app**: Python module and FastAPI app instance
+- **--host 0.0.0.0**: Accept connections from all interfaces
+- **--port $PORT**: Use Railway's dynamic port assignment
+
+### 2. RAILWAY.JSON (Build Configuration)
+**File**: `railway.json`
+```json
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "nixpacks",
+    "buildCommand": "pip install -r requirements.txt"
+  },
+  "deploy": {
+    "startCommand": "uvicorn main:app --host 0.0.0.0 --port $PORT",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10,
+    "healthcheckPath": "/health"
+  }
+}
+```
+
+**Configuration Details**:
+- **builder**: Nixpacks auto-detects Python and sets up environment
+- **buildCommand**: Installs Python dependencies
+- **startCommand**: How to start the application
+- **restartPolicy**: Restart on failure, max 10 attempts
+- **healthcheck**: Railway monitors `/health` endpoint
+
+### 3. REQUIREMENTS.TXT (Dependencies)
+**File**: `requirements.txt`
+```
+praisonaiagents
+openai
+chromadb
+python-dotenv
+PyPDF2
+fastapi
+uvicorn[standard]
+websockets
+supabase
+pydantic
+pytesseract==0.3.13
+pillow==11.2.1
+pdf2image==1.17.0
+opencv-python==4.11.0.86
+python-multipart==0.0.20
+sentence-transformers==2.2.2
+reportlab==4.0.4
+```
+
+**Important Dependencies**:
+- **fastapi**: Web framework
+- **uvicorn[standard]**: ASGI server with extra features
+- **pytesseract**: OCR functionality
+- **opencv-python**: Image processing
+- **supabase**: Database client
+
+## ENVIRONMENT VARIABLES SETUP
+==============================
+
+### Required Environment Variables:
+Set these in Railway dashboard under "Variables" tab:
+
+#### 1. OpenAI Configuration:
+```
+OPENAI_API_KEY=sk-your-openai-api-key-here
+```
+
+#### 2. Supabase Configuration:
+```
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-supabase-anon-key-here
+```
+
+#### 3. Production Configuration:
+```
+ENVIRONMENT=production
+ALLOWED_ORIGINS=https://your-frontend-domain.com,https://tawjihiai.netlify.app
+```
+
+#### 4. Railway System Variables (Auto-set):
+```
+PORT=8000                    # Railway sets this automatically
+RAILWAY_ENVIRONMENT=production
+RAILWAY_PROJECT_ID=your-project-id
+RAILWAY_SERVICE_ID=your-service-id
+```
+
+### Setting Environment Variables in Railway:
+1. Go to Railway dashboard
+2. Select your project
+3. Click on "Variables" tab
+4. Add each variable with name and value
+5. Deploy to apply changes
+
+## DEPLOYMENT PROCESS
+====================
+
+### Automatic Deployment:
+Railway automatically deploys when code is pushed to the connected Git branch:
+
+```bash
+# 1. Make changes to code
+git add .
+git commit -m "Update backend features"
+
+# 2. Push to main branch (or configured branch)
+git push origin main
+
+# 3. Railway automatically:
+#    - Detects changes
+#    - Builds new image
+#    - Runs tests (if configured)
+#    - Deploys new version
+#    - Routes traffic to new deployment
+```
+
+### Manual Deployment:
+You can also trigger manual deployments from Railway dashboard:
+1. Go to Railway project
+2. Click "Deploy" button
+3. Select branch to deploy
+4. Monitor build logs
+
+### Deployment Workflow:
+```
+Git Push → Railway Webhook → Build Start → Install Dependencies → 
+Start Application → Health Check → Route Traffic → Deployment Complete
+```
+
+## BUILD PROCESS
+===============
+
+### Build Steps (Automated by Railway):
+1. **Environment Setup**: Python 3.11+ environment creation
+2. **Dependency Installation**: `pip install -r requirements.txt`
+3. **System Packages**: Auto-install system dependencies (Tesseract, etc.)
+4. **Application Preparation**: Copy source code and configure
+5. **Health Check**: Verify application starts correctly
+6. **Traffic Routing**: Switch traffic to new deployment
+
+### Build Optimization:
+```json
+{
+  "build": {
+    "builder": "nixpacks",
+    "buildCommand": "pip install --no-cache-dir -r requirements.txt"
+  }
+}
+```
+
+**Optimization Techniques**:
+- `--no-cache-dir`: Reduces build size
+- Layer caching for faster rebuilds
+- Dependency optimization for production
+
+## TESSERACT OCR DEPLOYMENT
+===========================
+
+### Automatic Installation:
+Railway's Nixpacks automatically detects and installs:
+- Tesseract OCR engine
+- English language data (eng.traineddata)
+- Arabic language data (ara.traineddata)
+
+### Verification:
+The OCR service automatically checks Tesseract availability on startup:
+```python
+try:
+    pytesseract.get_tesseract_version()
+    logger.info("Tesseract OCR initialized successfully")
+except Exception as e:
+    logger.error(f"Tesseract OCR not found: {e}")
+```
+
+### Manual Verification:
+Check deployment logs for Tesseract initialization messages.
+
+## MONITORING AND LOGGING
+=========================
+
+### Application Logs:
+Railway provides real-time logs accessible via:
+1. **Dashboard**: View logs in Railway web interface
+2. **CLI**: `railway logs` command (if Railway CLI installed)
+3. **API**: Programmatic log access
+
+### Log Configuration:
+```python
+# Configured in main.py
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),  # Console output for Railway
+        # File logging disabled in production
+    ]
+)
+```
+
+### Health Monitoring:
+- **Health Endpoint**: `/health` monitored by Railway
+- **Uptime Monitoring**: Railway tracks service availability
+- **Performance Metrics**: Response times and error rates
+
+### Custom Monitoring:
+```python
+# Add custom metrics to health endpoint
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "service": "TawjihiAI API",
+        "version": "2.0.0",
+        "database": "connected",  # Add database check
+        "openai": "configured"    # Add OpenAI API check
+    }
+```
+
+## SCALING AND PERFORMANCE
+=========================
+
+### Automatic Scaling:
+Railway automatically scales based on:
+- CPU usage
+- Memory consumption
+- Request volume
+- Response times
+
+### Resource Limits:
+- **Memory**: 8GB max (Railway Pro plan)
+- **CPU**: Shared CPU resources
+- **Storage**: Ephemeral (files don't persist between deployments)
+- **Bandwidth**: Unlimited
+
+### Performance Optimization:
+```python
+# Production optimizations in main.py
+if os.getenv('ENVIRONMENT') == 'production':
+    # Disable debug mode
+    app.debug = False
+    
+    # Optimize logging
+    logging.getLogger().setLevel(logging.WARNING)
+    
+    # Enable compression
+    from fastapi.middleware.gzip import GZipMiddleware
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
+```
+
+## DOMAIN AND SSL
+================
+
+### Default Domain:
+- **URL**: https://tawjihiai-production.up.railway.app
+- **SSL**: Automatically provided by Railway
+- **HTTPS**: Enforced by default
+
+### Custom Domain (Optional):
+1. Add custom domain in Railway dashboard
+2. Configure DNS CNAME record
+3. SSL certificate automatically provisioned
+4. Update CORS settings to include new domain
+
+### CORS Configuration for Deployment:
+```python
+# In main.py - production CORS settings
+allowed_origins = os.getenv(
+    "ALLOWED_ORIGINS", 
+    "https://your-frontend-domain.com,https://tawjihiai.netlify.app"
+).split(",")
+```
+
+## DATABASE CONNECTION
+======================
+
+### Supabase Integration:
+- **External Database**: Supabase (not Railway PostgreSQL)
+- **Connection**: Via environment variables
+- **Persistence**: Data survives deployments
+- **Backups**: Managed by Supabase
+
+### Connection Configuration:
+```python
+# In supabase_client.py
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise ValueError("Database configuration missing")
+```
+
+### Connection Monitoring:
+```python
+# Add database health check
+async def check_database():
+    try:
+        result = memory.client.table('conversations').select('count').execute()
+        return True
+    except:
+        return False
+```
+
+## TROUBLESHOOTING DEPLOYMENT
+============================
+
+### Common Build Failures:
+
+#### 1. Dependency Installation Errors:
+```bash
+# Error: Failed to install requirements
+# Solution: Check requirements.txt syntax
+pip install -r requirements.txt  # Test locally first
+```
+
+#### 2. Environment Variable Missing:
+```bash
+# Error: SUPABASE_URL not found
+# Solution: Set environment variables in Railway dashboard
+```
+
+#### 3. Port Binding Issues:
+```bash
+# Error: Port already in use
+# Solution: Ensure using $PORT environment variable
+uvicorn main:app --host 0.0.0.0 --port $PORT
+```
+
+#### 4. Tesseract Not Found:
+```bash
+# Error: TesseractNotFoundError
+# Solution: Railway should auto-install, check build logs
+```
+
+### Deployment Health Checks:
+
+#### 1. Test Endpoints After Deployment:
+```bash
+# Health check
+curl https://tawjihiai-production.up.railway.app/health
+
+# API endpoints
+curl https://tawjihiai-production.up.railway.app/api/agents
+
+# WebSocket (use online WebSocket tester)
+wss://tawjihiai-production.up.railway.app/ws/test/math
+```
+
+#### 2. Monitor Application Logs:
+- Check Railway dashboard logs for errors
+- Look for startup messages and warnings
+- Monitor OCR initialization messages
+
+#### 3. Database Connectivity:
+```bash
+# Test database connection
+curl -X GET https://tawjihiai-production.up.railway.app/api/conversations/test123
+```
+
+### Performance Issues:
+
+#### 1. Slow Response Times:
+- Check OpenAI API latency
+- Monitor database query performance
+- Optimize image processing
+
+#### 2. Memory Usage:
+- Monitor Railway metrics
+- Optimize file upload sizes
+- Clear temporary files
+
+#### 3. CPU Usage:
+- OCR processing is CPU-intensive
+- Consider request queuing for high load
+- Monitor concurrent user limits
+
+## BACKUP AND RECOVERY
+=====================
+
+### Code Backup:
+- **Git Repository**: Primary source backup
+- **Railway Deployments**: Previous versions accessible
+- **Manual Backup**: Download source via Railway CLI
+
+### Data Backup:
+- **Database**: Supabase handles backups
+- **Uploaded Files**: Ephemeral (not backed up)
+- **Configuration**: Environment variables in Railway
+
+### Disaster Recovery:
+1. **Code Recovery**: Deploy from Git repository
+2. **Environment Recreation**: Reset environment variables
+3. **Database Recovery**: Supabase point-in-time recovery
+4. **Domain Reconfiguration**: Update DNS if needed
+
+## SECURITY CONSIDERATIONS
+=========================
+
+### Production Security:
+- **HTTPS**: Enforced by Railway
+- **Environment Variables**: Securely stored
+- **API Keys**: Never committed to Git
+- **CORS**: Properly configured for production domains
+
+### Security Best Practices:
+```python
+# Secure headers
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*.railway.app", "your-domain.com"])
+
+# Rate limiting (consider implementing)
+from slowapi import Limiter
+limiter = Limiter(key_func=get_remote_address)
+```
+
+## COST OPTIMIZATION
+===================
+
+### Railway Pricing:
+- **Free Tier**: Limited resources and hours
+- **Pro Plan**: $20/month for production apps
+- **Usage-Based**: Additional costs for high resource usage
+
+### Cost Monitoring:
+- Monitor monthly usage in Railway dashboard
+- Optimize resource-intensive operations
+- Consider request caching for repeated operations
+
+### Optimization Strategies:
+- Cache OCR results for duplicate images
+- Optimize image processing to reduce CPU usage
+- Monitor OpenAI API costs separately
+- Use efficient database queries
+
+This deployment guide ensures reliable, scalable deployment of TawjihiAI 
+backend on Railway with proper monitoring, security, and performance 
+optimization.

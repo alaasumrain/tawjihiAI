@@ -1,0 +1,354 @@
+# TAWJIHIAI DATABASE SCHEMA DOCUMENTATION
+========================================
+
+## DATABASE PROVIDER
+Supabase (PostgreSQL-based)
+- Real-time capabilities
+- Built-in authentication (auth.users)
+- Row-level security (ENABLED on new tables)
+- REST API auto-generation
+
+## DATABASE CLIENT
+File: supabase_client.py
+Class: TawjihiMemory
+Instance: memory (global)
+
+## DATABASE CONFIGURATION
+========================
+Environment Variables Required:
+- SUPABASE_URL: Your Supabase project URL
+- SUPABASE_KEY: Supabase anonymous key
+
+Connection Setup:
+```python
+from supabase import create_client, Client
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+```
+
+## ⚠️ CRITICAL SCHEMA MISMATCH WARNING
+=====================================
+The actual database schema (from migrations) differs significantly from what 
+the backend TawjihiMemory class expects. See "SCHEMA MISMATCH ISSUES" section below.
+
+## TABLES USED BY BACKEND
+========================
+
+### 1. CONVERSATIONS TABLE ✅
+**Purpose**: Store conversation sessions between users and AI tutors
+**Table Name**: `conversations`
+**Status**: WORKING - Structure matches backend expectations
+
+**Expected Schema by Backend**:
+```sql
+-- Backend expects these columns:
+id UUID PRIMARY KEY
+user_id TEXT NOT NULL  -- Note: Backend uses TEXT, not UUID
+teacher_id TEXT NOT NULL  -- 'math', 'arabic', 'english'
+title TEXT
+created_at TIMESTAMP WITH TIME ZONE
+updated_at TIMESTAMP WITH TIME ZONE
+```
+
+**Business Logic**:
+- One conversation per user-teacher pair
+- Auto-created when user first chats with a tutor
+- `updated_at` modified when new messages are added
+- Title auto-generated as "Chat with {Subject} Teacher"
+
+### 2. MESSAGES TABLE ✅
+**Purpose**: Store individual messages within conversations
+**Table Name**: `messages`
+**Status**: WORKING - Structure matches backend expectations
+
+**Expected Schema by Backend**:
+```sql
+-- Backend expects these columns:
+id UUID PRIMARY KEY
+conversation_id UUID REFERENCES conversations(id)
+content TEXT NOT NULL
+role TEXT NOT NULL  -- 'user' or 'assistant'
+created_at TIMESTAMP WITH TIME ZONE
+```
+
+**Business Logic**:
+- `role` can be 'user' or 'assistant'
+- Messages ordered by `created_at` within conversations
+- Content stored as plain text
+
+### 3. STUDY_SESSIONS TABLE ❌
+**Purpose**: Track user study sessions
+**Table Name**: `study_sessions`
+**Status**: SCHEMA MISMATCH - Backend expects different structure
+
+**Backend Expects**:
+```sql
+id UUID PRIMARY KEY
+user_id TEXT NOT NULL  -- Backend uses TEXT
+session_type TEXT DEFAULT 'chat'
+subject TEXT NOT NULL
+questions_answered INTEGER DEFAULT 0
+correct_answers INTEGER DEFAULT 0
+started_at TIMESTAMP WITH TIME ZONE
+```
+
+**Actual Schema (from migrations)**:
+```sql
+CREATE TABLE public.study_sessions (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users NOT NULL,  -- UUID, not TEXT!
+  subject_id UUID REFERENCES public.subjects(id) ON DELETE CASCADE NOT NULL,
+  duration_minutes INTEGER NOT NULL DEFAULT 0,
+  topics_covered TEXT[],
+  notes TEXT,
+  score INTEGER CHECK (score >= 0 AND score <= 100),
+  session_date TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+```
+
+## ADDITIONAL TABLES (Not Used by Backend)
+=========================================
+
+### 4. SUBJECTS TABLE (NEW)
+**Purpose**: Track subjects for study planning
+**Table Name**: `subjects`
+**Status**: Created by migration but NOT USED by backend
+
+**Actual Schema**:
+```sql
+CREATE TABLE public.subjects (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  grade_level TEXT,
+  difficulty_level TEXT CHECK (difficulty_level IN ('beginner', 'intermediate', 'advanced')),
+  study_hours_target INTEGER DEFAULT 0,
+  study_hours_completed INTEGER DEFAULT 0,
+  completion_percentage INTEGER DEFAULT 0,
+  last_studied_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+```
+
+### 5. SUBJECT_TOPICS TABLE (NEW)
+**Purpose**: Organize learning content within subjects
+**Table Name**: `subject_topics`
+**Status**: Created by migration but NOT USED by backend
+
+**Actual Schema**:
+```sql
+CREATE TABLE public.subject_topics (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  subject_id UUID REFERENCES public.subjects(id) ON DELETE CASCADE NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  is_completed BOOLEAN DEFAULT FALSE,
+  order_index INTEGER DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+```
+
+## ROW LEVEL SECURITY (RLS)
+==========================
+RLS is ENABLED on subjects, study_sessions, and subject_topics tables:
+
+```sql
+-- All new tables have RLS enabled
+ALTER TABLE public.subjects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.study_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.subject_topics ENABLE ROW LEVEL SECURITY;
+
+-- Policies restrict access to authenticated users' own data
+-- Users can only see/modify their own records
+```
+
+## DATABASE OPERATIONS (TawjihiMemory Class)
+===========================================
+
+### WORKING METHODS ✅
+
+#### get_or_create_conversation()
+```python
+def get_or_create_conversation(self, user_id: str, teacher_id: str, title: Optional[str] = None) -> str:
+```
+**Status**: WORKING - Conversations table exists with expected structure
+**Purpose**: Find existing conversation or create new one
+**Returns**: Conversation ID (UUID string)
+
+#### save_message()
+```python
+def save_message(self, conversation_id: str, content: str, role: str) -> bool:
+```
+**Status**: WORKING - Messages table exists with expected structure
+**Purpose**: Save message and update conversation timestamp
+**Returns**: Boolean success status
+
+#### get_conversation_history()
+```python
+def get_conversation_history(self, conversation_id: str, limit: int = 50) -> List[Dict]:
+```
+**Status**: WORKING - Queries existing messages table correctly
+**Purpose**: Retrieve conversation messages in chronological order
+**Returns**: List of message dictionaries
+
+### BROKEN METHOD ❌
+
+#### create_study_session()
+```python
+def create_study_session(self, user_id: str, subject: str) -> str:
+```
+**Status**: WILL FAIL - Schema mismatch
+**Issue**: Backend expects different table structure than what exists
+**Error**: Column mismatch - missing session_type, questions_answered, etc.
+
+## ⚠️ SCHEMA MISMATCH ISSUES
+============================
+
+### Critical Problems:
+1. **User ID Types**: 
+   - Backend uses TEXT for user_id
+   - Database migrations use UUID REFERENCES auth.users
+
+2. **Study Sessions Structure**:
+   - Backend expects: user_id (TEXT), session_type, subject, questions_answered
+   - Actual table has: user_id (UUID), subject_id (UUID), duration_minutes, score
+
+3. **Missing Integration**:
+   - Backend doesn't use subjects or subject_topics tables
+   - Study sessions functionality may fail
+
+### Current Working Status:
+- ✅ Conversations and Messages: WORKING
+- ❌ Study Sessions: BROKEN due to schema mismatch
+- ❌ Subjects System: Not integrated with backend
+
+## MIGRATION HISTORY
+===================
+Located in: `/frontend/supabase/migrations/`
+1. **20250625143159**: Cleanup migration
+2. **20250625144119**: Unknown changes  
+3. **20250625151517**: Added subjects, study_sessions, subject_topics
+
+## RECOMMENDATIONS FOR NEW DEVELOPER
+===================================
+
+### Immediate Actions:
+1. **Test Study Sessions**: The create_study_session() method will likely fail
+2. **Choose Integration Approach**: 
+   - Option A: Update backend to match database schema
+   - Option B: Create migration to match backend expectations
+   - Option C: Disable study sessions feature temporarily
+
+### Database Verification Commands:
+```sql
+-- Check actual table structure
+\d conversations
+\d messages  
+\d study_sessions
+
+-- Test backend compatibility
+SELECT column_name, data_type 
+FROM information_schema.columns 
+WHERE table_name = 'study_sessions';
+```
+
+This documentation reflects the ACTUAL database state and highlights 
+critical mismatches that need resolution.
+
+## PERFORMANCE CONSIDERATIONS
+============================
+
+### Indexing Strategy:
+- All foreign keys are indexed
+- Temporal queries use created_at/updated_at indexes
+- User-specific queries use user_id indexes
+- Composite indexes for common query patterns
+
+### Query Optimization:
+- Conversation history limited to 50 messages by default
+- Messages ordered by timestamp for efficient retrieval
+- Cascade deletes prevent orphaned records
+
+### Connection Management:
+- Single Supabase client instance shared across application
+- Connection pooling handled by Supabase client
+- Real-time subscriptions available but not currently used
+
+## MIGRATION NOTES
+=================
+
+### Existing Migrations:
+Located in: `/frontend/supabase/migrations/`
+- 20250625143159: Initial schema setup
+- 20250625144119: Schema modifications  
+- 20250625151517: Additional features
+
+### Migration Best Practices:
+1. Always backup before migrations
+2. Test migrations in development first
+3. Use transactions for complex migrations
+4. Update this documentation after schema changes
+
+## SECURITY CONSIDERATIONS
+=========================
+
+### Row Level Security (RLS):
+Currently not implemented but recommended for production:
+```sql
+-- Enable RLS
+ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+
+-- Policy examples
+CREATE POLICY "Users can only see their conversations" 
+ON conversations FOR ALL USING (auth.uid()::text = user_id);
+
+CREATE POLICY "Users can only see their messages" 
+ON messages FOR ALL USING (
+    conversation_id IN (
+        SELECT id FROM conversations WHERE user_id = auth.uid()::text
+    )
+);
+```
+
+### Data Validation:
+- All text fields validated at application level
+- Foreign key constraints prevent orphaned records
+- CHECK constraints on enum fields (role, session_type)
+
+## BACKUP STRATEGY
+=================
+- Supabase provides automatic backups
+- Point-in-time recovery available
+- Consider regular data exports for critical conversations
+- Monitor storage usage and cleanup old sessions
+
+## TROUBLESHOOTING
+=================
+
+### Common Issues:
+1. **Connection failures**: Check SUPABASE_URL and SUPABASE_KEY
+2. **Permission errors**: Verify RLS policies if enabled
+3. **Performance issues**: Check query execution plans
+4. **Storage limits**: Monitor table sizes and cleanup policies
+
+### Debugging Queries:
+```python
+# Enable query logging
+import logging
+logging.getLogger('supabase').setLevel(logging.DEBUG)
+
+# Check connection
+try:
+    result = memory.client.table('conversations').select('count').execute()
+    print(f"Connection OK, {len(result.data)} conversations found")
+except Exception as e:
+    print(f"Connection failed: {e}")
+```
+
+This database schema is designed to support the conversational AI tutoring 
+system with proper data relationships, performance optimization, and 
+future scalability considerations.

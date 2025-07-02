@@ -1,0 +1,386 @@
+# TAWJIHIAI API ENDPOINTS DOCUMENTATION
+======================================
+
+## BASE URL
+- Development: http://localhost:8000
+- Production: https://tawjihiai-production.up.railway.app
+
+## INTERACTIVE API DOCUMENTATION
+===============================
+FastAPI automatically generates interactive API documentation:
+- **Swagger UI**: http://localhost:8000/docs (or /docs on production)
+- **ReDoc**: http://localhost:8000/redoc (or /redoc on production)
+
+These provide:
+- Interactive API testing
+- Request/response examples
+- Schema validation details
+- Live endpoint testing
+
+## AUTHENTICATION
+Currently using simple username-based authentication.
+No JWT tokens required for most endpoints.
+
+## CORE API ENDPOINTS
+===================
+
+### 1. GET / 
+**Purpose**: Home page with basic info
+**Response**: HTML page with system status
+**Example**:
+```
+GET /
+Response: HTML page showing "TawjihiAI FastAPI" with status info
+```
+
+### 2. GET /health
+**Purpose**: Health check endpoint
+**Response**: JSON with service status
+**Example**:
+```bash
+curl -X GET "http://localhost:8000/health"
+
+Response:
+{
+  "status": "healthy",
+  "service": "TawjihiAI API", 
+  "version": "2.0.0"
+}
+```
+
+### 3. GET /api/agents
+**Purpose**: Get list of available AI tutors
+**Response**: Array of agent information
+**Example**:
+```bash
+curl -X GET "http://localhost:8000/api/agents"
+
+Response:
+[
+  {
+    "id": "math",
+    "name": "MathTutor", 
+    "description": "متخصص في الرياضيات"
+  },
+  {
+    "id": "arabic",
+    "name": "ArabicTutor",
+    "description": "متخصص في اللغة العربية"  
+  },
+  {
+    "id": "english",
+    "name": "EnglishTutor",
+    "description": "متخصص في اللغة الإنجليزية"
+  }
+]
+```
+
+### 4. POST /api/ask
+**Purpose**: Ask a question to an AI tutor
+**Request Body**:
+```json
+{
+  "subject": "math",
+  "question": "How do I solve quadratic equations?",
+  "user_id": "user123" // optional
+}
+```
+**Response**:
+```json
+{
+  "response": "To solve quadratic equations...",
+  "conversation_id": "conv_uuid_here"
+}
+```
+**Example**:
+```bash
+curl -X POST "http://localhost:8000/api/ask" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subject": "math",
+    "question": "What is the quadratic formula?",
+    "user_id": "student123"
+  }'
+```
+
+### 5. GET /api/conversations/{user_id}
+**Purpose**: Get conversation history for a user
+**Parameters**: user_id (path parameter)
+**Response**: Array of user conversations
+**Example**:
+```bash
+curl -X GET "http://localhost:8000/api/conversations/student123"
+
+Response:
+{
+  "conversations": [
+    {
+      "id": "conv_uuid",
+      "user_id": "student123", 
+      "teacher_id": "math",
+      "title": "Chat with Math Teacher",
+      "created_at": "2024-01-01T10:00:00Z",
+      "updated_at": "2024-01-01T10:30:00Z"
+    }
+  ]
+}
+```
+
+### 6. POST /api/auth/login
+**Purpose**: Simple login (creates session)
+**Request Body**:
+```json
+{
+  "username": "student123",
+  "password": "optional"  
+}
+```
+**Response**:
+```json
+{
+  "message": "تم تسجيل الدخول بنجاح",
+  "session_id": "session_uuid",
+  "user_id": "student123"
+}
+```
+
+### 7. POST /api/upload/homework
+**Purpose**: Upload homework image for OCR processing
+**Request**: Multipart form data
+**Fields**:
+- file: Image file (required)
+- user_id: User identifier (required)  
+- subject: Subject hint (optional)
+
+**Response**:
+```json
+{
+  "success": true,
+  "file_id": "filename.jpg",
+  "filename": "homework.jpg",
+  "extracted_text": "solve x² + 5x + 6 = 0",
+  "confidence": 85.5,
+  "content_type": "image/jpeg"
+}
+```
+
+**Example**:
+```bash
+curl -X POST "http://localhost:8000/api/upload/homework" \
+  -F "file=@homework.jpg" \
+  -F "user_id=student123" \
+  -F "subject=math"
+```
+
+### 8. POST /api/ocr/extract
+**Purpose**: Extract text from image using OCR
+**Request**: Multipart form data
+**Fields**:
+- file: Image file (required)
+- language: Language hint - 'ara' or 'eng' (optional)
+
+**Response**:
+```json
+{
+  "primary": {
+    "text": "extracted text here",
+    "language": "ara",
+    "confidence": 78.5,
+    "has_text": true,
+    "word_count": 15
+  },
+  "secondary": {
+    "text": "alternative extraction",
+    "language": "eng", 
+    "confidence": 65.2,
+    "has_text": true,
+    "word_count": 12
+  },
+  "combined_text": "extracted text here\nalternative extraction"
+}
+```
+
+### 9. POST /api/solve/step-by-step
+**Purpose**: Get step-by-step solution for homework problem
+**Request**: Form data
+**Fields**:
+- problem_text: The problem to solve (required, 1-5000 chars)
+- subject: Subject area (required, 1-100 chars)
+- user_id: User identifier (optional, max 100 chars)
+
+**Response**:
+```json
+{
+  "problem": "Solve x² + 5x + 6 = 0",
+  "solution": "Step 1: Identify the quadratic equation...",
+  "subject": "math",
+  "solved_at": "2024-01-01T10:30:00Z"
+}
+```
+
+### 10. GET /api/supported-formats
+**Purpose**: Get supported file formats for upload
+**Response**:
+```json
+{
+  "image_types": ["image/jpeg", "image/png", "image/gif"],
+  "document_types": ["application/pdf", "text/plain"],
+  "max_file_size": 10485760
+}
+```
+
+## WEBSOCKET ENDPOINTS
+====================
+
+### WS /ws/{user_id}/{agent_id}
+**Purpose**: Real-time chat with AI tutors
+**Parameters**: 
+- user_id: User identifier
+- agent_id: Agent ID (math, arabic, english)
+
+**Connection Example**:
+```javascript
+const ws = new WebSocket('ws://localhost:8000/ws/student123/math');
+
+ws.onopen = () => {
+  console.log('Connected to math tutor');
+};
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  console.log('Received:', data);
+};
+```
+
+**Message Format (Send)**:
+```json
+{
+  "type": "question",
+  "subject": "math", 
+  "question": "What is calculus?"
+}
+```
+
+**Message Format (Receive)**:
+```json
+{
+  "type": "message",
+  "content": "Calculus is a branch of mathematics..."
+}
+```
+
+**Status Messages**:
+```json
+{
+  "type": "status", 
+  "content": "متصل مع math"
+}
+```
+
+**Error Messages**:
+```json
+{
+  "type": "error",
+  "content": "Error message here"
+}
+```
+
+## ERROR RESPONSES
+=================
+
+### Validation Error (422)
+```json
+{
+  "error": "Validation Error",
+  "detail": "Invalid request data",
+  "errors": [
+    {
+      "loc": ["body", "subject"],
+      "msg": "field required", 
+      "type": "value_error.missing"
+    }
+  ]
+}
+```
+
+### HTTP Error (400, 404, 500, etc.)
+```json
+{
+  "error": "HTTP Error",
+  "detail": "Error description",
+  "status_code": 400
+}
+```
+
+### Internal Server Error (500)
+```json
+{
+  "error": "Internal Server Error",
+  "detail": "An unexpected error occurred",
+  "request_id": "uuid-for-tracking"
+}
+```
+
+## REQUEST VALIDATION
+====================
+
+### Question Request Validation:
+- subject: 1-100 characters, required
+- question: 1-5000 characters, required  
+- user_id: max 100 characters, optional
+
+### Login Request Validation:
+- username: 1-50 characters, required
+- password: 6-100 characters, optional
+
+### File Upload Validation:
+- Max file size: 10MB
+- Supported image types: JPEG, PNG, GIF, BMP, WebP
+- Supported document types: PDF, TXT
+
+## CORS CONFIGURATION
+===================
+- Allowed Origins: Configurable via ALLOWED_ORIGINS env var
+- Allowed Methods: GET, POST, PUT, DELETE, OPTIONS
+- Allowed Headers: Content-Type, Authorization, Accept, Origin, X-Requested-With
+- Credentials: Enabled
+
+## RATE LIMITING
+===============
+Currently no rate limiting implemented.
+Consider adding rate limiting for production use.
+
+## TESTING ENDPOINTS
+===================
+
+### Test with curl:
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# Get agents
+curl http://localhost:8000/api/agents
+
+# Ask question
+curl -X POST http://localhost:8000/api/ask \
+  -H "Content-Type: application/json" \
+  -d '{"subject":"math","question":"What is 2+2?"}'
+
+# Upload homework
+curl -X POST http://localhost:8000/api/upload/homework \
+  -F "file=@test.jpg" \
+  -F "user_id=test123"
+```
+
+### Test WebSocket:
+Use a WebSocket client or browser console to test real-time chat functionality.
+
+## IMPORTANT NOTES
+=================
+
+1. **Arabic Language Support**: All AI responses can be in Arabic
+2. **Bilingual OCR**: Supports both Arabic and English text extraction  
+3. **Conversation Memory**: Messages are automatically saved to database
+4. **Error Logging**: All errors are logged with timestamps and request details
+5. **Health Monitoring**: Use /health endpoint for uptime monitoring
+6. **File Security**: Uploaded files are validated for type and size

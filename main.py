@@ -1,12 +1,15 @@
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File, Form
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File, Form, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.exceptions import RequestValidationError
+from pydantic import BaseModel, ValidationError, Field
 from typing import Optional, List, Dict
 import json
 import uuid
 from datetime import datetime
 import logging
+import traceback
+import os
 
 from main_cli import ask
 from supabase_client import memory
@@ -14,7 +17,14 @@ from services.ocr_service import ocr_service
 from services.file_handler import file_handler
 
 # Set up logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('tawjihiai.log') if os.getenv('ENVIRONMENT') != 'production' else logging.NullHandler()
+    ]
+)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
@@ -24,12 +34,14 @@ app = FastAPI(
 )
 
 # Configure CORS
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:8080,https://tawjihiai.netlify.app").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
 )
 
 # Pydantic models
@@ -39,9 +51,9 @@ class AgentInfo(BaseModel):
     description: str
 
 class QuestionRequest(BaseModel):
-    subject: str
-    question: str
-    user_id: Optional[str] = None
+    subject: str = Field(..., min_length=1, max_length=100, description="Subject must be between 1 and 100 characters")
+    question: str = Field(..., min_length=1, max_length=5000, description="Question must be between 1 and 5000 characters")
+    user_id: Optional[str] = Field(None, max_length=100, description="User ID must be less than 100 characters")
 
 class MessageResponse(BaseModel):
     response: str
@@ -70,8 +82,8 @@ class HomeworkSolution(BaseModel):
     difficulty: str
 
 class LoginRequest(BaseModel):
-    username: str
-    password: Optional[str] = None
+    username: str = Field(..., min_length=1, max_length=50, description="Username must be between 1 and 50 characters")
+    password: Optional[str] = Field(None, min_length=6, max_length=100, description="Password must be between 6 and 100 characters")
 
 # Store active WebSocket connections
 class ConnectionManager:
@@ -91,6 +103,43 @@ class ConnectionManager:
             await self.active_connections[client_id].send_json(data)
 
 manager = ConnectionManager()
+
+# Global exception handlers
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.error(f"Validation error on {request.url}: {exc}")
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "Validation Error",
+            "detail": "Invalid request data",
+            "errors": exc.errors()
+        }
+    )
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    logger.error(f"HTTP error on {request.url}: {exc.detail}")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": "HTTP Error",
+            "detail": exc.detail,
+            "status_code": exc.status_code
+        }
+    )
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unexpected error on {request.url}: {str(exc)}\n{traceback.format_exc()}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal Server Error",
+            "detail": "An unexpected error occurred",
+            "request_id": str(uuid.uuid4())
+        }
+    )
 
 @app.get("/", response_class=HTMLResponse)
 async def get_home():
@@ -127,6 +176,7 @@ async def login(request: LoginRequest):
 
 @app.post("/api/ask", response_model=MessageResponse)
 async def ask_question(request: QuestionRequest):
+    logger.info(f"Question received: subject={request.subject}, user_id={request.user_id}")
     try:
         if not request.subject or not request.question:
             raise HTTPException(status_code=400, detail="يرجى إدخال المادة والسؤال")
@@ -255,9 +305,9 @@ async def extract_text_from_image(
 
 @app.post("/api/solve/step-by-step")
 async def solve_homework_step_by_step(
-    problem_text: str = Form(...),
-    subject: str = Form(...),
-    user_id: Optional[str] = Form(None)
+    problem_text: str = Form(..., min_length=1, max_length=5000),
+    subject: str = Form(..., min_length=1, max_length=100),
+    user_id: Optional[str] = Form(None, max_length=100)
 ):
     """
     Get step-by-step solution for homework problem
